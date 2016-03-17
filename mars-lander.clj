@@ -1,9 +1,9 @@
 (ns Player
   (:gen-class))
 
-(def acc-gravity -56)
-(def ^:const max-v-speed 20)
-(def ^:const max-h-speed 40)
+(def acc-gravity -3.711)
+(def ^:const max-v-speed 40)
+(def ^:const max-h-speed 20)
 
 (defn landing-zone
   [surface]
@@ -31,8 +31,9 @@
   "Return a map of the change in thrust and rotation."
   [dir]
   {:thrust 4
-   :rotation (* dir 15)})
+   :rotation (* dir 35)})
 
+;; TODO: conserve fuel!
 (defn descend-vertically
   [v-speed power]
   (let [thrust (if (>= (- v-speed) max-v-speed)
@@ -42,16 +43,31 @@
    :rotation 0}))
 
 (defn calculate-thrust
-  [x y midway-point surface zone v-speed power]
+  [x y midway-point surface zone v-speed h-speed power]
   (let [left-x (ffirst zone)
-        dist-zone (- x left-x)
-        dir (/ dist-zone (Math/abs dist-zone))
-        dist-midway (- midway-point left-x)]
+        right-x (-> zone second first)
+        dist-right (- x right-x)
+        dist-left (- x left-x)
+        dist-zone (cond 
+                    (over-zone? x zone)
+                      0
+                    (< (Math/abs dist-right) (Math/abs dist-left))
+                      dist-right
+                    :else 
+                      dist-left)
+        dir (if-not (zero? dist-zone)
+              (/ dist-zone (Math/abs dist-zone))
+              0)
+        dist-midway (- midway-point left-x)
+        abs-h-speed (Math/abs h-speed)
+        abs-v-speed (Math/abs v-speed)]
     (cond
-      (over-zone? x zone)
+      (and (over-zone? x zone) (<= abs-h-speed max-h-speed))
         (descend-vertically v-speed power)
-      (<= (Math/abs dist-zone) (Math/abs dist-midway))
-        (go-horizontally (- dir))
+      (and (over-zone? x zone) (> abs-h-speed max-h-speed))
+        (go-horizontally (/ h-speed abs-h-speed))
+      (or (> abs-h-speed (+ 10 max-h-speed)) (> abs-v-speed max-v-speed))
+        (descend-vertically v-speed power)
       :else
         (go-horizontally dir))))
 
@@ -66,5 +82,5 @@
     (println "0" "0")
     (while true
       (let [[x y h-speed v-speed fuel rotate power] (repeatedly 7 (comp int read))
-            {:keys [rotation thrust]} (calculate-thrust x y midway-point surface zone v-speed power)]
+            {:keys [rotation thrust]} (calculate-thrust x y midway-point surface zone v-speed h-speed power)]
         (println rotation thrust)))))
